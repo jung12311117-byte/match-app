@@ -1,0 +1,9 @@
+{
+"name": "Match Scheduler",
+"short_name": "Scheduler",
+"start_url": "index.html",
+"display": "standalone",
+"background_color": "#ffffff",
+"description": "Offline Match Scheduler",
+"icons": []
+}
