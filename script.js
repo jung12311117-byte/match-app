@@ -166,6 +166,10 @@ function shuffle(arr){ return arr.sort(()=>Math.random()-0.5); }
 function render(){
 
 let out=document.getElementById("output");
+let exportBtn=document.createElement("button");
+exportBtn.innerText="匯出 Excel";
+exportBtn.onclick=exportCSV;
+out.appendChild(exportBtn);
 out.innerHTML="";
 
 schedule.forEach((r,ri)=>{
