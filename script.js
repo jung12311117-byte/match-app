@@ -12,7 +12,7 @@ originalNames = document.getElementById("players").value
 courtCountGlobal = parseInt(document.getElementById("courts").value);
 
 if(originalNames.length < 4){
-alert("至少需要4人");
+alert("至少4人");
 return;
 }
 
@@ -25,10 +25,7 @@ if(resetAll) schedule=[];
 
 let names=[...originalNames];
 
-let stats={};
-let teammateHistory={};
-let opponentHistory={};
-let lastPlayed={};
+let stats={}, teammateHistory={}, opponentHistory={}, lastPlayed={};
 
 names.forEach(n=>{
 stats[n]=0;
@@ -37,9 +34,7 @@ opponentHistory[n]={};
 lastPlayed[n]=-99;
 });
 
-let maxRound=20;
-
-for(let round=1; round<=maxRound; round++){
+for(let round=1; round<=20; round++){
 
 if(round < startRound && schedule[round-1]){
 applyExistingRound(schedule[round-1],stats,lastPlayed,teammateHistory,opponentHistory,round);
@@ -53,7 +48,6 @@ if(playingCount>names.length)
 playingCount=names.length-(names.length%4);
 
 let resters=pickResters(names,stats,lastPlayed,playingCount);
-
 let available=names.filter(n=>!resters.includes(n));
 
 for(let c=1;c<=courtCountGlobal;c++){
@@ -64,43 +58,39 @@ let best=findBestMatch(available,stats,lastPlayed,teammateHistory,opponentHistor
 
 updateStats(best,round,stats,lastPlayed,teammateHistory,opponentHistory);
 
-roundData.push(best);
+roundData.push({
+players:best,
+score1:0,
+score2:0
+});
 
 available=available.filter(p=>!best.includes(p));
 }
 
-schedule[round-1]={
-round:round,
-matches:roundData,
-rest:resters
-};
+schedule[round-1]={ round, matches:roundData, rest:resters };
 }
 
 render();
-saveLocal();
 }
 
 function applyExistingRound(r,stats,lastPlayed,teammateHistory,opponentHistory,round){
-
 r.matches.forEach(m=>{
-updateStats(m,round,stats,lastPlayed,teammateHistory,opponentHistory);
+updateStats(m.players,round,stats,lastPlayed,teammateHistory,opponentHistory);
 });
 }
 
 function pickResters(names,stats,lastPlayed,playingCount){
-
-let sorted=[...names].sort((a,b)=>{
+return [...names]
+.sort((a,b)=>{
 if(stats[b]!=stats[a]) return stats[b]-stats[a];
 return lastPlayed[b]-lastPlayed[a];
-});
-
-return sorted.slice(0,names.length-playingCount);
+})
+.slice(0,names.length-playingCount);
 }
 
 function findBestMatch(pool,stats,lastPlayed,teammateHistory,opponentHistory,round){
 
-let bestScore=Infinity;
-let best=null;
+let bestScore=Infinity,best=null;
 
 for(let i=0;i<80;i++){
 
@@ -117,15 +107,13 @@ let t2=[four[2],four[3]];
 
 t1.forEach(a=>{
 t1.forEach(b=>{
-if(a!=b)
-score+=(teammateHistory[a][b]||0)*100;
+if(a!=b) score+=(teammateHistory[a][b]||0)*100;
 });
 });
 
 t2.forEach(a=>{
 t2.forEach(b=>{
-if(a!=b)
-score+=(teammateHistory[a][b]||0)*100;
+if(a!=b) score+=(teammateHistory[a][b]||0)*100;
 });
 });
 
@@ -135,10 +123,7 @@ score+=(opponentHistory[a][b]||0)*60;
 });
 });
 
-if(score<bestScore){
-bestScore=score;
-best=four;
-}
+if(score<bestScore){ bestScore=score; best=four; }
 }
 
 return best;
@@ -176,32 +161,29 @@ opponentHistory[b][a]=(opponentHistory[b][a]||0)+1;
 });
 }
 
-function shuffle(arr){
-return arr.sort(()=>Math.random()-0.5);
-}
+function shuffle(arr){ return arr.sort(()=>Math.random()-0.5); }
 
 function render(){
 
 let out=document.getElementById("output");
 out.innerHTML="";
 
-schedule.forEach(r=>{
+schedule.forEach((r,ri)=>{
 
 let title=document.createElement("div");
 title.innerHTML="<b>第 "+r.round+" 輪</b>";
 out.appendChild(title);
 
-r.matches.forEach((m,i)=>{
+r.matches.forEach((m,mi)=>{
+
 let div=document.createElement("div");
 div.className="match";
 
 div.innerHTML=
-"場"+(i+1)+": "+
-"<input value='"+m[0]+"'> "+
-"<input value='"+m[1]+"'> VS "+
-"<input value='"+m[2]+"'> "+
-"<input value='"+m[3]+"'> "+
-"<button onclick='rebuildFrom("+r.round+")'>重排後續</button>";
+m.players[0]+" "+m.players[1]+" ("+
+"<input type='number' value='"+m.score1+"' onchange='updateScore("+ri+","+mi+",1,this.value)'> ) VS ("+
+"<input type='number' value='"+m.score2+"' onchange='updateScore("+ri+","+mi+",2,this.value)'> ) "+
+m.players[2]+" "+m.players[3];
 
 out.appendChild(div);
 });
@@ -211,20 +193,55 @@ rest.innerText="休息: "+r.rest.join(" ");
 out.appendChild(rest);
 });
 
-renderStats();
+renderRanking();
 }
 
-function renderStats(){
+function updateScore(r,m,team,value){
 
-let statsCount={};
+if(team==1) schedule[r].matches[m].score1=parseInt(value||0);
+if(team==2) schedule[r].matches[m].score2=parseInt(value||0);
+
+renderRanking();
+}
+
+function renderRanking(){
+
+let table={};
+
+originalNames.forEach(n=>{
+table[n]={win:0,lose:0,point:0,score:0,against:0};
+});
 
 schedule.forEach(r=>{
 r.matches.forEach(m=>{
-m.forEach(p=>{
-statsCount[p]=(statsCount[p]||0)+1;
+
+let t1=[m.players[0],m.players[1]];
+let t2=[m.players[2],m.players[3]];
+
+t1.forEach(p=>{
+table[p].score+=m.score1;
+table[p].against+=m.score2;
+});
+
+t2.forEach(p=>{
+table[p].score+=m.score2;
+table[p].against+=m.score1;
+});
+
+if(m.score1>m.score2){
+t1.forEach(p=>{ table[p].win++; table[p].point+=2; });
+t2.forEach(p=>{ table[p].lose++; });
+}
+if(m.score2>m.score1){
+t2.forEach(p=>{ table[p].win++; table[p].point+=2; });
+t1.forEach(p=>{ table[p].lose++; });
+}
 });
 });
-});
+
+let arr=Object.keys(table).map(p=>({name:p,...table[p]}));
+
+arr.sort((a,b)=> b.point-a.point || (b.score-b.against)-(a.score-a.against));
 
 let out=document.getElementById("output");
 
@@ -232,35 +249,18 @@ let hr=document.createElement("hr");
 out.appendChild(hr);
 
 let title=document.createElement("div");
-title.innerHTML="<b>上場統計</b>";
+title.innerHTML="<b>排名</b>";
 out.appendChild(title);
 
-Object.keys(statsCount).forEach(p=>{
+arr.forEach((p,i)=>{
 let div=document.createElement("div");
-div.innerText=p+" : "+statsCount[p]+" 次";
+div.innerText=
+(i+1)+". "+p.name+
+" 積分:"+p.point+
+" 勝:"+p.win+
+" 敗:"+p.lose+
+" 得:"+p.score+
+" 失:"+p.against;
 out.appendChild(div);
 });
-}
-
-function rebuildFrom(round){
-
-// 讀取修改後名單
-document.querySelectorAll(".match").forEach((div,i)=>{
-let inputs=div.querySelectorAll("input");
-let rIndex=Math.floor(i/courtCountGlobal);
-let mIndex=i%courtCountGlobal;
-
-schedule[rIndex].matches[mIndex]=[
-inputs[0].value,
-inputs[1].value,
-inputs[2].value,
-inputs[3].value
-];
-});
-
-buildSchedule(round,false);
-}
-
-function saveLocal(){
-localStorage.setItem("ultimateSchedule",JSON.stringify(schedule));
 }
