@@ -1,142 +1,40 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>羽球賽程工具</title>
-    <style>
-        .match { margin-bottom: 10px; padding: 5px; border-bottom: 1px solid #ccc; }
-        input[type="number"] { width: 50px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match Scheduler</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body { font-family: sans-serif; padding:15px; }
+textarea { width:100%; height:120px; }
+button { padding:10px; margin:5px 0; width:100%; font-size:16px; }
+select { width:100%; padding:8px; }
+.match { border:1px solid #ccc; padding:8px; margin:8px 0; }
+.round-title { font-weight:bold; margin-top:15px; }
+input.small { width:60px; }
+</style>
 </head>
 <body>
-    <h3>名單 (每行一個名字)</h3>
-    <textarea id="players" rows="5">玩家1\n玩家2\n玩家3\n玩家4\n玩家5\n玩家6\n玩家7\n玩家8</textarea><br>
-    場地數: <input type="number" id="courts" value="1"><br>
-    <button onclick="generate()">產生賽程</button>
 
-    <div id="output"></div>
+<h2>對戰排程系統</h2>
 
-    <script>
-        let schedule = [];
-        let originalNames = [];
-        let courtCountGlobal = 1;
+<textarea id="players" placeholder="每行一個人名"></textarea>
 
-        function generate() {
-            originalNames = document.getElementById("players").value.split("\n").map(x => x.trim()).filter(x => x);
-            courtCountGlobal = parseInt(document.getElementById("courts").value);
-            if (originalNames.length < 4) { alert("至少4人"); return; }
-            buildSchedule(1, true);
-        }
+<select id="courts">
+<option value="1">1 場地</option>
+<option value="2">2 場地</option>
+<option value="3">3 場地</option>
+</select>
 
-        function buildSchedule(startRound, resetAll = false) {
-            if (resetAll) schedule = [];
-            let names = [...originalNames];
-            let stats = {}, teammateHistory = {}, opponentHistory = {}, lastPlayed = {};
-            names.forEach(n => { stats[n] = 0; teammateHistory[n] = {}; opponentHistory[n] = {}; lastPlayed[n] = -99; });
+<button onclick="generate()">產生 20 輪</button>
+<button onclick="resetAll()">重置</button>
 
-            for (let round = 1; round <= 20; round++) {
-                if (round < startRound && schedule[round - 1]) {
-                    applyExistingRound(schedule[round - 1], stats, lastPlayed, teammateHistory, opponentHistory, round);
-                    continue;
-                }
-                let roundData = [];
-                let playingCount = Math.min(courtCountGlobal * 4, names.length - (names.length % 4));
-                let resters = pickResters(names, stats, lastPlayed, playingCount);
-                let available = names.filter(n => !resters.includes(n));
+<hr>
 
-                for (let c = 1; c <= courtCountGlobal; c++) {
-                    if (available.length < 4) break;
-                    let best = findBestMatch(available, stats, lastPlayed, teammateHistory, opponentHistory, round);
-                    updateStats(best, round, stats, lastPlayed, teammateHistory, opponentHistory);
-                    roundData.push({ players: best, score1: 0, score2: 0 });
-                    available = available.filter(p => !best.includes(p));
-                }
-                schedule[round - 1] = { round, matches: roundData, rest: resters };
-            }
-            render();
-        }
+<div id="output"></div>
 
-        function render() {
-            let out = document.getElementById("output");
-            out.innerHTML = "";
-            schedule.forEach((r, ri) => {
-                let title = document.createElement("div");
-                title.innerHTML = `<h3>*第 ${r.round} 輪*</h3>`;
-                out.appendChild(title);
-                r.matches.forEach((m, mi) => {
-                    let div = document.createElement("div");
-                    div.className = "match";
-                    div.innerHTML = `
-                        (${m.players}, ${m.players[1]}) VS (${m.players[7]}, ${m.players[8]}) 
-                        分數: <input type="number" value="${m.score1}" onchange="updateScore(${ri},${mi},1,this.value)"> : 
-                        <input type="number" value="${m.score2}" onchange="updateScore(${ri},${mi},2,this.value)">
-                    `;
-                    out.appendChild(div);
-                });
-                let rest = document.createElement("div");
-                rest.innerText = "休息: " + r.rest.join(", ");
-                out.appendChild(rest);
-            });
-            renderRanking();
-        }
+<script src="script.js"></script>
 
-        function updateScore(r, m, team, value) {
-            if (team == 1) schedule[r].matches[m].score1 = parseInt(value || 0);
-            if (team == 2) schedule[r].matches[m].score2 = parseInt(value || 0);
-            render(); // 這裡必須重繪以更新排名
-        }
-
-        function renderRanking() {
-            let table = {};
-            originalNames.forEach(n => table[n] = { win: 0, lose: 0, point: 0, score: 0, against: 0 });
-            schedule.forEach(r => {
-                r.matches.forEach(m => {
-                    let t1 = [m.players, m.players[1]], t2 = [m.players[7], m.players[8]];
-                    t1.forEach(p => { table[p].score += m.score1; table[p].against += m.score2; });
-                    t2.forEach(p => { table[p].score += m.score2; table[p].against += m.score1; });
-                    if (m.score1 > m.score2) {
-                        t1.forEach(p => { table[p].win++; table[p].point += 2; });
-                        t2.forEach(p => { table[p].lose++; });
-                    } else if (m.score2 > m.score1) {
-                        t2.forEach(p => { table[p].win++; table[p].point += 2; });
-                        t1.forEach(p => { table[p].lose++; });
-                    }
-                });
-            });
-            let arr = Object.keys(table).map(p => ({ name: p, ...table[p] }));
-            arr.sort((a, b) => b.point - a.point || (b.score - b.against) - (a.score - a.against));
-            let out = document.getElementById("output");
-            out.appendChild(document.createElement("hr"));
-            let title = document.createElement("div");
-            title.innerHTML = "<h2>*目前排名*</h2>";
-            out.appendChild(title);
-            arr.forEach((p, i) => {
-                let div = document.createElement("div");
-                div.innerText = `${i + 1}. ${p.name} | 積分:${p.point} | 勝:${p.win} 敗:${p.lose} | 得:${p.score} 失:${p.against}`;
-                out.appendChild(div);
-            });
-        }
-
-        // --- 輔助運算函式 ---
-        function applyExistingRound(r, stats, lastPlayed, teammateHistory, opponentHistory, round) {
-            r.matches.forEach(m => updateStats(m.players, round, stats, lastPlayed, teammateHistory, opponentHistory));
-        }
-        function pickResters(names, stats, lastPlayed, playingCount) {
-            return [...names].sort((a, b) => (stats[b] - stats[a]) || (lastPlayed[b] - lastPlayed[a])).slice(0, names.length - playingCount);
-        }
-        function findBestMatch(pool, stats, lastPlayed, teammateHistory, opponentHistory, round) {
-            let bestScore = Infinity, best = null;
-            for (let i = 0; i < 50; i++) {
-                let four = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
-                let score = 0;
-                four.forEach(p => { score += stats[p] * 120; if (round - lastPlayed[p] == 1) score += 300; });
-                if (score < bestScore) { bestScore = score; best = four; }
-            }
-            return best;
-        }
-        function updateStats(four, round, stats, lastPlayed, teammateHistory, opponentHistory) {
-            four.forEach(p => { stats[p]++; lastPlayed[p] = round; });
-        }
-    </script>
 </body>
 </html>
